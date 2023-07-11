@@ -1,0 +1,34 @@
+type Message = record {
+  id : text;
+  sender : principal;
+  message : text;
+  roomId : text;
+};
+type MessagePayload = record { message : text; roomId : text };
+type Room = record {
+  id : text;
+  title : text;
+  members : vec principal;
+  owner : principal;
+  createdAt : nat64;
+  description : text;
+  updatedAt : opt nat64;
+  avatar : text;
+};
+type RoomPayload = record { title : text; description : text; avatar : text };
+type _AzleResult = variant { Ok : Room; Err : text };
+type _AzleResult_1 = variant { Ok : text; Err : text };
+type _AzleResult_2 = variant { Ok : vec Message; Err : text };
+type _AzleResult_3 = variant { Ok : vec Room; Err : text };
+type _AzleResult_4 = variant { Ok : Message; Err : text };
+service : () -> {
+  addMembersToRoom : (text, principal) -> (_AzleResult);
+  addRoom : (RoomPayload) -> (_AzleResult);
+  deleteMessage : (text) -> (_AzleResult_1);
+  deleteRoom : (text) -> (_AzleResult_1);
+  getMessagesForRoom : (text) -> (_AzleResult_2) query;
+  getRoom : (text) -> (_AzleResult) query;
+  getRoomsForUser : () -> (_AzleResult_3) query;
+  sendMessage : (MessagePayload) -> (_AzleResult_4);
+  updateRoom : (text, RoomPayload) -> (_AzleResult);
+}
