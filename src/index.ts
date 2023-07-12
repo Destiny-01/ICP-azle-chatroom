@@ -134,7 +134,7 @@ export function addMembersToRoom(
       }
 
       room.members.push(member); // Add the member to the room's members array
-      roomStorage.insert(room.id, room); // Update the room in the room storage
+      roomStorage.insert(id, room); // Update the room in the room storage
       return Result.Ok<Room, string>(room);
     },
     None: () =>
@@ -165,9 +165,7 @@ export function deleteRoom(id: string): Result<string, string> {
       }
 
       roomStorage.remove(id); // Remove the room from the room storage
-      return Result.Err<string, string>(
-        `You are not authorized to delete the room.`
-      );
+      return Result.Ok<string, string>(`Room ${id} deleted successfully`);
     },
     None: () => {
       return Result.Err<string, string>(
@@ -205,67 +203,3 @@ $query;
 // Retrieve messages for a room
 export function getMessagesForRoom(
   roomId: string
-): Result<Vec<Message>, string> {
-  return match(roomStorage.get(roomId), {
-    Some: (room: Room) => {
-      // Confirm only members of room can call this function
-      const isMember = room.members
-        .map(String)
-        .includes(ic.caller().toString());
-      if (!isMember) {
-        return Result.Err<Message[], string>(`You don't belong to this room.`);
-      }
-
-      const messages = messageStorage.values(); // get all the messages
-      const returnedMessages: Message[] = [];
-
-      for (const message of messages) {
-        if (message.roomId === roomId) {
-          returnedMessages.push(message); // filter messages for that room only
-        }
-      }
-
-      return Result.Ok<Message[], string>(returnedMessages);
-    },
-    None: () => {
-      return Result.Err<Message[], string>(
-        `A room with id=${roomId} was not found.`
-      );
-    },
-  });
-}
-
-$update;
-// Delete a message
-export function deleteMessage(id: string): Result<string, string> {
-  return match(messageStorage.get(id), {
-    Some: (message: Message) => {
-      // Confirm only owner of message can call this function
-      if (ic.caller().toString() !== message.sender.toString()) {
-        return Result.Err<string, string>(
-          `You are not authorized to delete this message.`
-        );
-      }
-      messageStorage.remove(id); // Remove the message from the message storage
-      return Result.Ok<string, string>(`Room ${id} deleted successfully`);
-    },
-    None: () => {
-      return Result.Err<string, string>(
-        `couldn't delete a message with id=${id}. message not found`
-      );
-    },
-  });
-}
-
-// a workaround to make uuid package work with Azle
-globalThis.crypto = {
-  getRandomValues: () => {
-    let array = new Uint8Array(32);
-
-    for (let i = 0; i < array.length; i++) {
-      array[i] = Math.floor(Math.random() * 256);
-    }
-
-    return array;
-  },
-};
