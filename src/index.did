@@ -9,6 +9,7 @@ type Room = record {
   id : text;
   title : text;
   members : vec principal;
+  messages : vec Message;
   owner : principal;
   createdAt : nat64;
   description : text;
@@ -20,7 +21,6 @@ type _AzleResult = variant { Ok : Room; Err : text };
 type _AzleResult_1 = variant { Ok : text; Err : text };
 type _AzleResult_2 = variant { Ok : vec Message; Err : text };
 type _AzleResult_3 = variant { Ok : vec Room; Err : text };
-type _AzleResult_4 = variant { Ok : Message; Err : text };
 service : () -> {
   addMembersToRoom : (text, principal) -> (_AzleResult);
   addRoom : (RoomPayload) -> (_AzleResult);
@@ -29,6 +29,6 @@ service : () -> {
   getMessagesForRoom : (text) -> (_AzleResult_2) query;
   getRoom : (text) -> (_AzleResult) query;
   getRoomsForUser : () -> (_AzleResult_3) query;
-  sendMessage : (MessagePayload) -> (_AzleResult_4);
+  sendMessage : (MessagePayload) -> (_AzleResult);
   updateRoom : (text, RoomPayload) -> (_AzleResult);
 }
