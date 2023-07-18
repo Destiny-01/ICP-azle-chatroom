@@ -23,6 +23,7 @@ type Room = Record<{
   members: Vec<Principal>; // Array of room members
   createdAt: nat64; // Timestamp of when the room was created
   updatedAt: Opt<nat64>; // Optional timestamp of when the room was last updated
+  messages: Vec<Message>; // An array of message to hold all the messages sent to the room
 }>;
 
 // Define the RoomPayload type for creating and updating rooms
@@ -83,6 +84,7 @@ export function addRoom(payload: RoomPayload): Result<Room, string> {
     updatedAt: Opt.None, // Set the initial update timestamp as None
     owner: ic.caller(), // Set the owner of the room as the current caller
     members: [ic.caller()], // Initialize the members array with the caller as first member
+    messages: [], // Initialize the messages array to an empty array
     ...payload,
   };
 
@@ -165,9 +167,7 @@ export function deleteRoom(id: string): Result<string, string> {
       }
 
       roomStorage.remove(id); // Remove the room from the room storage
-      return Result.Err<string, string>(
-        `You are not authorized to delete the room.`
-      );
+      return Result.Ok<string, string>(`Room ${id} deleted successfully`);
     },
     None: () => {
       return Result.Err<string, string>(
@@ -179,23 +179,30 @@ export function deleteRoom(id: string): Result<string, string> {
 
 $update;
 // Send a message to a room
-export function sendMessage(payload: MessagePayload): Result<Message, string> {
+export function sendMessage(payload: MessagePayload): Result<Room, string> {
   return match(roomStorage.get(payload.roomId), {
     Some: (room: Room) => {
       // Confirm only members of room can call this function
-      const isMember = room.members
-        .map(String)
-        .includes(ic.caller().toString());
+      const isMember = room.members.map(String).includes(ic.caller().toString());
       if (!isMember) {
-        return Result.Err<Message, string>(`You don't belong to this room.`);
+        return Result.Err<Room, string>(`You don't belong to this room.`);
       }
+      const roomMessages = room.messages; // Get the current messages in the room
 
       const message = { sender: ic.caller(), id: uuidv4(), ...payload }; // Create the message payload
+
+      roomMessages.push(message); // push the new messages to the room's messages
+      
+      const updatedRoom: Room = {
+        ...room,
+        messages: roomMessages // Update the rooms messages properties with the new message included
+      }
       messageStorage.insert(message.id, message); // Store the message in the message storage
-      return Result.Ok<Message, string>(message);
+      roomStorage.insert(payload.roomId, updatedRoom); // Update the room in roomStorage
+      return Result.Ok<Room, string>(updatedRoom); // Return the new room with all its messages
     },
     None: () =>
-      Result.Err<Message, string>(
+      Result.Err<Room, string>(
         `A room with id=${payload.roomId} was not found.`
       ),
   });
