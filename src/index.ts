@@ -10,6 +10,7 @@ import {
   ic,
   Opt,
   Principal,
+  nat32,
 } from "azle";
 import { v4 as uuidv4 } from "uuid";
 
@@ -21,6 +22,7 @@ type Room = Record<{
   avatar: string; // URL of the room's avatar image
   owner: Principal; // Owner of the room
   members: Vec<Principal>; // Array of room members
+  messages: Vec<Message>;
   createdAt: nat64; // Timestamp of when the room was created
   updatedAt: Opt<nat64>; // Optional timestamp of when the room was last updated
 }>;
@@ -34,10 +36,8 @@ type RoomPayload = Record<{
 
 // Define the Message type
 type Message = Record<{
-  id: string; // Unique identifier for the message
   message: string; // Content of the message
   sender: Principal; // Sender of the message
-  roomId: string; // ID of the room to which the message belongs
 }>;
 
 // Define the MessagePayload type for sending messages
@@ -48,7 +48,6 @@ type MessagePayload = Record<{
 
 // Create a new StableBTreeMap to store rooms and messages
 const roomStorage = new StableBTreeMap<string, Room>(0, 44, 1024);
-const messageStorage = new StableBTreeMap<string, Message>(1, 44, 1024);
 
 $query;
 // Retrieve rooms for the current user
@@ -57,7 +56,7 @@ export function getRoomsForUser(): Result<Vec<Room>, string> {
   const returnedRooms: Room[] = [];
 
   for (const room of rooms) {
-    if (room.members.map(String).includes(ic.caller().toString())) {
+    if (room.members.findIndex((member) => member.toString() === ic.caller().toString()) > -1) {
       returnedRooms.push(room);
     }
   }
@@ -83,6 +82,7 @@ export function addRoom(payload: RoomPayload): Result<Room, string> {
     updatedAt: Opt.None, // Set the initial update timestamp as None
     owner: ic.caller(), // Set the owner of the room as the current caller
     members: [ic.caller()], // Initialize the members array with the caller as first member
+    messages: [],
     ...payload,
   };
 
@@ -156,22 +156,14 @@ export function deleteRoom(id: string): Result<string, string> {
         );
       }
 
-      // remove the messages in that room
-      const messages = messageStorage.values();
-      for (const message of messages) {
-        if (message.roomId === id) {
-          messageStorage.remove(message.id);
-        }
-      }
-
       roomStorage.remove(id); // Remove the room from the room storage
-      return Result.Err<string, string>(
-        `You are not authorized to delete the room.`
+      return Result.Ok<string, string>(
+        `Successfully deleted the room.`
       );
     },
     None: () => {
       return Result.Err<string, string>(
-        `couldn't delete a room with id=${id}. room not found`
+        `couldn't delete a room with id=${id}. Room not found`
       );
     },
   });
@@ -183,15 +175,13 @@ export function sendMessage(payload: MessagePayload): Result<Message, string> {
   return match(roomStorage.get(payload.roomId), {
     Some: (room: Room) => {
       // Confirm only members of room can call this function
-      const isMember = room.members
-        .map(String)
-        .includes(ic.caller().toString());
+      const isMember = room.members.findIndex((member) => member.toString() === ic.caller().toString()) > -1? true: false;
       if (!isMember) {
         return Result.Err<Message, string>(`You don't belong to this room.`);
       }
 
       const message = { sender: ic.caller(), id: uuidv4(), ...payload }; // Create the message payload
-      messageStorage.insert(message.id, message); // Store the message in the message storage
+      roomStorage.insert(room.id, {...room, messages: [...room.messages, message]}) // Store the message in the message storage
       return Result.Ok<Message, string>(message);
     },
     None: () =>
@@ -209,23 +199,11 @@ export function getMessagesForRoom(
   return match(roomStorage.get(roomId), {
     Some: (room: Room) => {
       // Confirm only members of room can call this function
-      const isMember = room.members
-        .map(String)
-        .includes(ic.caller().toString());
+      const isMember = room.members.findIndex((member) => member.toString() === ic.caller().toString()) > -1? true: false;
       if (!isMember) {
         return Result.Err<Message[], string>(`You don't belong to this room.`);
       }
-
-      const messages = messageStorage.values(); // get all the messages
-      const returnedMessages: Message[] = [];
-
-      for (const message of messages) {
-        if (message.roomId === roomId) {
-          returnedMessages.push(message); // filter messages for that room only
-        }
-      }
-
-      return Result.Ok<Message[], string>(returnedMessages);
+      return Result.Ok<Message[], string>(room.messages);
     },
     None: () => {
       return Result.Err<Message[], string>(
@@ -237,17 +215,22 @@ export function getMessagesForRoom(
 
 $update;
 // Delete a message
-export function deleteMessage(id: string): Result<string, string> {
-  return match(messageStorage.get(id), {
-    Some: (message: Message) => {
+export function deleteMessage(id: string, messageId: nat32): Result<string, string> {
+  return match(roomStorage.get(id), {
+    Some: (room: Room) => {
+      if(room.messages.length <= messageId){
+        return Result.Err<string,string>("MessageId is out of bounds.")
+      }
       // Confirm only owner of message can call this function
-      if (ic.caller().toString() !== message.sender.toString()) {
+      if (ic.caller().toString() !== room.messages[messageId].sender.toString()) {
         return Result.Err<string, string>(
           `You are not authorized to delete this message.`
         );
       }
-      messageStorage.remove(id); // Remove the message from the message storage
-      return Result.Ok<string, string>(`Room ${id} deleted successfully`);
+      const updatedMessages = [...room.messages];
+      updatedMessages.splice(messageId, 1) // Remove the message from the message storage
+      roomStorage.insert(id, {...room, messages: updatedMessages})
+      return Result.Ok<string, string>(`Message deleted successfully`);
     },
     None: () => {
       return Result.Err<string, string>(
