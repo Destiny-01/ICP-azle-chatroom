@@ -165,9 +165,7 @@ export function deleteRoom(id: string): Result<string, string> {
       }
 
       roomStorage.remove(id); // Remove the room from the room storage
-      return Result.Err<string, string>(
-        `You are not authorized to delete the room.`
-      );
+      return Result.Ok<string, string>(`Room deleted successfully.`);
     },
     None: () => {
       return Result.Err<string, string>(
