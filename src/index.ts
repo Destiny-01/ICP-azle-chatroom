@@ -145,6 +145,36 @@ export function addMembersToRoom(
 }
 
 $update;
+// removing a member from room
+export function removeMemberFromRoom(
+  id: string,
+  member: Principal
+): Result<Room, string> {
+  return match(roomStorage.get(id), {
+    Some: (room: Room) => {
+      // Confirm only owner can call this function
+      if (ic.caller().toString() !== room.owner.toString()) {
+        return Result.Err<Room, string>(`You are not the owner of the room.`);
+      }
+
+      const memberIndex = room.members.indexOf(member); // Find the index of the member in the room's members array
+
+      if (memberIndex > -1) {
+        room.members.splice(memberIndex, 1); // Remove the member from the room's members array
+        roomStorage.insert(room.id, room); // Update the room in the room storage
+        return Result.Ok<Room, string>(room);
+      } else {
+        return Result.Err<Room, string>(`Member not found in the room.`);
+      }
+    },
+    None: () =>
+      Result.Err<Room, string>(
+        `Couldn't update a room with id=${id}. Room not found.`
+      ),
+  });
+}
+
+$update;
 // Delete a room
 export function deleteRoom(id: string): Result<string, string> {
   return match(roomStorage.get(id), {
